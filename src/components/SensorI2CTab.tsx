@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { Sliders, RefreshCw, Send, Zap, Cpu, ToggleRight, Check, AlertCircle, Search, Filter } from 'lucide-react';
+import { Sliders, RefreshCw, Send, Zap, Cpu, ToggleRight, Check, AlertCircle, Search, Filter, Binary } from 'lucide-react';
 import { REGISTER_DATABASE } from '../data/cameraData';
 import { RegisterEntry } from '../types';
+import { I2CRegisterBrowser } from './I2CRegisterBrowser';
 
 export const SensorI2CTab: React.FC = () => {
+  const [subView, setSubView] = useState<'browser' | 'buffer'>('browser');
+
   // Double Buffering Simulator State
   const [exposureMs, setExposureMs] = useState<number>(12.5);
   const [gainDb, setGainDb] = useState<number>(0);
@@ -89,20 +92,59 @@ export const SensorI2CTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Intro Box */}
-      <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
-        <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2 mb-1">
-          <Sliders className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-          <span>onsemi AR0234CS 센서 아키텍처 & I2C 레지스터 제어</span>
-        </h2>
-        <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-          AR0234CS 센서 내부의 레지스터 제어는 400kHz Fast-mode I2C 2-wire 프로토콜(Slave ID 0x20)을 통과합니다. 프레임의 중도 찢김과 상하단 노출 불일치를 원천 차단하기 위한 <span className="font-semibold text-slate-800 dark:text-slate-200">이중 버퍼링(Double Buffering)</span> 메커니즘과 지연 없는 온-디맨드 해상도 전환을 위한 <span className="font-semibold text-slate-800 dark:text-slate-200">256×16 SRAM 컨텍스트 스위칭(Context Switching)</span>을 직접 시뮬레이션할 수 있습니다.
-        </p>
+      {/* Sub-view Switcher Bar */}
+      <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="flex items-center space-x-1.5 text-xs font-medium">
+          <button
+            onClick={() => setSubView('browser')}
+            className={`px-3.5 py-2 rounded-lg flex items-center space-x-2 transition ${
+              subView === 'browser'
+                ? 'bg-blue-600 text-white font-bold shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Binary className="w-4 h-4" />
+            <span>I2C 레지스터 브라우저 & 16-Bit 비트필드 자극기</span>
+          </button>
+
+          <button
+            onClick={() => setSubView('buffer')}
+            className={`px-3.5 py-2 rounded-lg flex items-center space-x-2 transition ${
+              subView === 'buffer'
+                ? 'bg-blue-600 text-white font-bold shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>이중 버퍼링(Double Buffering) & 컨텍스트 스위칭</span>
+          </button>
+        </div>
+
+        <div className="hidden sm:flex items-center space-x-2 text-xs font-mono text-slate-500 pr-2">
+          <span>I2C Fast-Mode 400kHz</span>
+          <span>·</span>
+          <span>Slave: 0x20</span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Double Buffering Interactive Simulator */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 transition-colors">
+      {subView === 'browser' ? (
+        <I2CRegisterBrowser />
+      ) : (
+        <>
+          {/* Intro Box */}
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2 mb-1">
+              <Sliders className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              <span>onsemi AR0234CS 센서 아키텍처 & 이중 버퍼링 제어</span>
+            </h2>
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              AR0234CS 센서 내부의 레지스터 제어는 400kHz Fast-mode I2C 2-wire 프로토콜(Slave ID 0x20)을 통과합니다. 프레임의 중도 찢김과 상하단 노출 불일치를 원천 차단하기 위한 <span className="font-semibold text-slate-800 dark:text-slate-200">이중 버퍼링(Double Buffering)</span> 메커니즘과 지연 없는 온-디맨드 해상도 전환을 위한 <span className="font-semibold text-slate-800 dark:text-slate-200">256×16 SRAM 컨텍스트 스위칭(Context Switching)</span>을 직접 시뮬레이션할 수 있습니다.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Double Buffering Interactive Simulator */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 transition-colors">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
               <RefreshCw className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -387,6 +429,8 @@ export const SensorI2CTab: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+    </>
+  )}
+</div>
   );
 };

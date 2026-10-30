@@ -13,6 +13,25 @@ export interface ProtocolLayer {
   bandwidth?: string;
 }
 
+export interface BitSlice {
+  startBit: number; // e.g. 15
+  endBit: number;   // e.g. 12
+  name: string;
+  description: string;
+  access: 'RW' | 'RO' | 'WO';
+}
+
+export interface DetailedRegister {
+  addressHex: string;
+  name: string;
+  description: string;
+  category: 'system' | 'geometry' | 'timing' | 'gain' | 'shutter' | 'test' | 'mipi';
+  defaultValue: number; // 16-bit integer (0x0000 - 0xFFFF)
+  access: 'RW' | 'RO';
+  bitfields: BitSlice[];
+  effectDescription?: string;
+}
+
 export interface RegisterEntry {
   address: string;
   name: string;

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Copy, Check, Download, FileCode, FileJson } from 'lucide-react';
 import { REGISTER_DATABASE, XU_CONTROLS, PROTOCOL_LAYERS } from '../data/cameraData';
+import { AR0234_DETAILED_REGISTERS } from '../data/ar0234Registers';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -20,7 +21,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => 
     interface: ['USB 2.0 High-Speed', 'USB 3.0 SuperSpeed', 'UVC 1.5'],
     mipi: '4-Lane MIPI D-PHY v1.2 (3.6Gbps)',
     i2cSlaveAddress: '0x20',
-    registers: REGISTER_DATABASE,
+    summaryRegisters: REGISTER_DATABASE,
+    detailedBitfieldRegisters: AR0234_DETAILED_REGISTERS,
     xuControls: XU_CONTROLS,
     layers: PROTOCOL_LAYERS.map((l) => ({
       level: l.level,
