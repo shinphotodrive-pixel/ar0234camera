@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hampotech AR0234 USB 글로벌 셔터 카메라 시스템 & 프로토콜 분석기</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    
+    /* Chart Container Custom Constraints */
+    .chart-container {
+      position: relative;
+      width: 100%;
+      max-width: 680px;
+      margin-left: auto;
+      margin-right: auto;
+      height: 320px;
+      max-height: 380px;
+    }
+    @media (min-width: 768px) {
+      .chart-container {
+        height: 350px;
+      }
+    }
+    
+    /* Dynamic UI pulse and active states */
+    .tab-active {
+      background-color: #ffffff;
+      color: #2563eb;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+      border-bottom: 2px solid #2563eb;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col selection:bg-blue-100 selection:text-blue-800">
+
+<!-- Chosen Palette: Slate Light Industrial (Background: #f8fafc, Cards: #ffffff, Primary: #2563eb, Accent: #059669 & #d97706, Text: #0f172a) -->
+
+<!-- Application Structure Plan:
+     1. Top Header & Device Status Bar: Highlights AR0234CS sensor specs, USB interface status, and active protocol modes.
+     2. Main Navigation Tabs:
+        - Tab 1: 전계층 프로토콜 아키텍처 (Layered Protocol Stack Visualizer & Live Packet Flow)
+        - Tab 2: AR0234CS 센서 & I2C 제어 (Double Buffering Register Simulator & Context Switching)
+        - Tab 3: UVC 토폴로지 & V4L2 매핑 (Topology Nodes, Control Requests, IOCTL Code Generator)
+        - Tab 4: 대역폭 & USB 페이로드 분석기 (Dynamic Chart.js Bandwidth Calculator, wMaxPacketSize Shift Decoder, UVC Payload Header Inspector)
+        - Tab 5: 글로벌 셔터 & 트리거 시뮬레이터 (Canvas Motion Artifacts Comparison, Hardware Trigger Pulsed/Sync-Sink Timing & Strobe Delay)
+     WHY THIS STRUCTURE: Converts a dense 8-section hardware protocol document into logical, interactive engineering workflows. Developers can simulate hardware timing, test register changes, verify Linux kernel mappings, and inspect bandwidth bottlenecks dynamically. -->
+
+<!-- Visualization & Content Choices:
+     - Protocol Stack: Interactive 5-level stacked visualizer -> Goal: Understand end-to-end signal path -> Method: Styled HTML/Tailwind + JS detailed drawer -> Justification: Replaces static text with clickable hierarchy.
+     - Bandwidth Bottlenecks: Dynamic Bar Chart -> Goal: Compare YUY2 vs MJPEG vs USB 2.0/3.0 bandwidth limits -> Method: Chart.js Canvas -> Interaction: Dynamic sliders for resolution/FPS -> Justification: Instant visual proof of why USB 2.0 requires MJPEG for 1080p60.
+     - Rolling vs Global Shutter: Interactive Animation -> Goal: Demonstrate geometric distortion & partial flash -> Method: HTML5 Canvas -> Interaction: Speed control & mode toggle -> Justification: Directly demonstrates the key selling point of global shutter.
+     - UVC Payload Header & Register Double Buffering: Step-by-step interactive simulators -> Method: HTML/JS logic controls -> Confirming NO SVG / NO Mermaid JS. -->
+
+<!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+  <!-- Top Application Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center space-x-3">
+        <div class="p-2 bg-blue-600 text-white rounded-xl shadow-md shadow-blue-500/20">
+          <i data-lucide="cpu" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-lg font-bold text-slate-900 leading-tight">Hampotech AR0234 프로토콜 관제 & 분석 시스템</h1>
+            <span class="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full border border-blue-200">2MP Global Shutter</span>
+          </div>
+          <p class="text-xs text-slate-500">onsemi AR0234CS · MIPI CSI-2 · USB 2.0/3.0 UVC 1.5 · HW External Trigger</p>
+        </div>
+      </div>
+
+      <!-- Quick Hardware Spec Badges -->
+      <div class="flex items-center space-x-2 text-xs">
+        <div class="bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 flex items-center space-x-1.5">
+          <i data-lucide="aperture" class="w-4 h-4 text-emerald-600"></i>
+          <span class="text-slate-600">센서:</span>
+          <span class="font-semibold text-slate-900">1920x1200 @ 120fps</span>
+        </div>
+        <div class="bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 flex items-center space-x-1.5">
+          <i data-lucide="cable" class="w-4 h-4 text-blue-600"></i>
+          <span class="text-slate-600">인터페이스:</span>
+          <span class="font-semibold text-slate-900">USB 2.0 / 3.0 UVC</span>
+        </div>
+        <div class="bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 flex items-center space-x-1.5">
+          <i data-lucide="zap" class="w-4 h-4 text-amber-600"></i>
+          <span class="text-slate-600">트리거 지연:</span>
+          <span class="font-semibold text-slate-900">&lt; 125 ns</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="max-w-7xl mx-auto px-4 mt-1">
+      <nav class="flex space-x-1 overflow-x-auto text-xs font-medium border-b border-slate-100 pb-px" id="mainTabs">
+        <button onclick="switchTab('tab-stack')" id="btn-tab-stack" class="tab-btn px-4 py-2.5 rounded-t-lg flex items-center space-x-2 text-slate-600 hover:text-blue-600 transition tab-active">
+          <i data-lucide="layers" class="w-4 h-4"></i>
+          <span>1. 전계층 프로토콜 스택</span>
+        </button>
+        <button onclick="switchTab('tab-i2c')" id="btn-tab-i2c" class="tab-btn px-4 py-2.5 rounded-t-lg flex items-center space-x-2 text-slate-600 hover:text-blue-600 transition">
+          <i data-lucide="sliders" class="w-4 h-4"></i>
+          <span>2. AR0234CS 센서 & I2C 제어</span>
+        </button>
+        <button onclick="switchTab('tab-uvc')" id="btn-tab-uvc" class="tab-btn px-4 py-2.5 rounded-t-lg flex items-center space-x-2 text-slate-600 hover:text-blue-600 transition">
+          <i data-lucide="terminal" class="w-4 h-4"></i>
+          <span>3. UVC 토폴로지 & V4L2 매핑</span>
+        </button>
+        <button onclick="switchTab('tab-bandwidth')" id="btn-tab-bandwidth" class="tab-btn px-4 py-2.5 rounded-t-lg flex items-center space-x-2 text-slate-600 hover:text-blue-600 transition">
+          <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+          <span>4. 대역폭 & USB 페이로드</span>
+        </button>
+        <button onclick="switchTab('tab-shutter')" id="btn-tab-shutter" class="tab-btn px-4 py-2.5 rounded-t-lg flex items-center space-x-2 text-slate-600 hover:text-blue-600 transition">
+          <i data-lucide="camera" class="w-4 h-4"></i>
+          <span>5. 글로벌 셔터 & 트리거</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full space-y-6">
+
+    <!-- TAB 1: 전계층 프로토콜 아키텍처 -->
+    <section id="tab-stack" class="tab-content space-y-6">
+      <!-- Introductory Paragraph -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <h2 class="text-base font-bold text-slate-900 flex items-center space-x-2 mb-2">
+          <i data-lucide="network" class="w-5 h-5 text-blue-600"></i>
+          <span>Hampotech AR0234 카메라 시스템의 전계층 연동 아키텍처</span>
+        </h2>
+        <p class="text-xs text-slate-600 leading-relaxed">
+          이 섹션은 빛 신호가 센서 픽셀에 수광되는 순간부터 호스트 운영체제의 V4L2/DirectShow 애플리케이션 버퍼에 전달되기까지의 5단계 통신 프로토콜 계층을 시각화합니다. 아래 계층 블록을 클릭하면 해당 구간에서 발생하는 실시간 데이터 포맷, 제어 방식, 대역폭 특성 및 핀 매핑 사양을 정밀하게 확인할 수 있습니다.
+        </p>
+      </div>
+
+      <!-- Protocol Stack Layer Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Stack Selection Column (Left 5 cols) -->
+        <div class="lg:col-span-5 space-y-3">
+          <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">프로토콜 통신 계층 (Click to Inspect)</div>
+          
+          <!-- Layer 5: App & Host OS -->
+          <div onclick="selectStackLayer(5)" id="layer-card-5" class="layer-card cursor-pointer bg-white p-4 rounded-xl border border-blue-500 shadow-sm hover:border-blue-600 transition relative overflow-hidden">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <span class="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center">L5</span>
+                <div>
+                  <h3 class="text-sm font-bold text-slate-900">호스트 OS & V4L2 / UVC 서브시스템</h3>
+                  <p class="text-xs text-slate-500">DirectShow / V4L2 Driver, UVCIOC_CTRL_MAP</p>
+                </div>
+              </div>
+              <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+            </div>
+          </div>
+
+          <!-- Layer 4: USB Bus Protocol -->
+          <div onclick="selectStackLayer(4)" id="layer-card-4" class="layer-card cursor-pointer bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-600 transition relative overflow-hidden">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <span class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center">L4</span>
+                <div>
+                  <h3 class="text-sm font-bold text-slate-900">USB 2.0 / 3.0 버스 전송 계층</h3>
+                  <p class="text-xs text-slate-500">High-Bandwidth Isochronous / Bulk, UVC Header</p>
+                </div>
+              </div>
+              <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+            </div>
+          </div>
+
+          <!-- Layer 3: ISP Engine -->
+          <div onclick="selectStackLayer(3)" id="layer-card-3" class="layer-card cursor-pointer bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-600 transition relative overflow-hidden">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <span class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center">L3</span>
+                <div>
+                  <h3 class="text-sm font-bold text-slate-900">ISP 파이프라인 & UVC 엔지니어링</h3>
+                  <p class="text-xs text-slate-500">De-Bayer, AWB, AE, MJPEG 압축, XU 파서</p>
+                </div>
+              </div>
+              <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+            </div>
+          </div>
+
+          <!-- Layer 2: Sensor Internal Bus -->
+          <div onclick="selectStackLayer(2)" id="layer-card-2" class="layer-card cursor-pointer bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-600 transition relative overflow-hidden">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <span class="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 font-bold text-xs flex items-center justify-center">L2</span>
+                <div>
+                  <h3 class="text-sm font-bold text-slate-900">MIPI CSI-2 & I2C 제어 버스</h3>
+                  <p class="text-xs text-slate-500">4-Lane D-PHY (3.6Gbps), 16-bit 레지스터 I2C</p>
+                </div>
+              </div>
+              <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+            </div>
+          </div>
+
+          <!-- Layer 1: CMOS Physical Sensor -->
+          <div onclick="selectStackLayer(1)" id="layer-card-1" class="layer-card cursor-pointer bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-600 transition relative overflow-hidden">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <span class="w-7 h-7 rounded-lg bg-rose-100 text-rose-700 font-bold text-xs flex items-center justify-center">L1</span>
+                <div>
+                  <h3 class="text-sm font-bold text-slate-900">AR0234CS 글로벌 셔터 센서 코어</h3>
+                  <p class="text-xs text-slate-500">1/2.6" Pixel Array, HW Trigger & Flash Strobe Pin</p>
+                </div>
+              </div>
+              <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Layer Detailed Breakdown (Right 7 cols) -->
+        <div class="lg:col-span-7">
+          <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-full flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <span id="stack-detail-badge" class="bg-blue-100 text-blue-800 font-bold text-xs px-2.5 py-1 rounded-md">L5 Layer Details</span>
+                <span id="stack-detail-bus" class="text-xs text-slate-500 font-mono">Protocol: V4L2 IOCTL / DirectShow API</span>
+              </div>
+              <h3 id="stack-detail-title" class="text-base font-bold text-slate-900 mb-2">호스트 애플리케이션 및 비디오 서브시스템</h3>
+              <p id="stack-detail-desc" class="text-xs text-slate-600 leading-relaxed mb-4">
+                호스트 OS(Linux/Windows)의 사용자 공간 애플리케이션이 카메라와 소통하는 최종 응용 계층입니다. 표준 UVC 1.1/1.5 드라이버를 통해 컨트롤을 조작하며, 커널 공간의 uvcvideo 드라이버가 UVCIOC_CTRL_MAP IOCTL 메커니즘을 수행하여 벤더 고유 확장 유닛(XU)을 V4L2 컨트롤로 매핑합니다.
+              </p>
+
+              <!-- Dynamic Key Properties Grid -->
+              <div class="grid grid-cols-2 gap-3 mb-4 text-xs" id="stack-detail-props">
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <span class="text-slate-500 block mb-0.5">드라이버 연동:</span>
+                  <span class="font-bold text-slate-800">uvcvideo (리눅스 커널 내장)</span>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <span class="text-slate-500 block mb-0.5">XU 제어 방식:</span>
+                  <span class="font-bold text-slate-800">16-Byte GUID + IOCTL 매핑</span>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <span class="text-slate-500 block mb-0.5">비디오 버퍼링:</span>
+                  <span class="font-bold text-slate-800">V4L2 mmap / DMABUF Queue</span>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <span class="text-slate-500 block mb-0.5">동기화 프레임 획득:</span>
+                  <span class="font-bold text-slate-800">PTS / SCR 타임스탬프 검증</span>
+                </div>
+              </div>
+
+              <!-- Technical Protocol Note Box -->
+              <div class="bg-blue-50/60 border border-blue-200/80 rounded-xl p-3.5 text-xs text-blue-950 space-y-1">
+                <div class="font-semibold flex items-center space-x-1 text-blue-800">
+                  <i data-lucide="info" class="w-4 h-4"></i>
+                  <span>보고서 핵심 프로토콜 인사이트</span>
+                </div>
+                <p id="stack-detail-note" class="leading-relaxed">
+                  별도의 벤더 드라이버 설치 없이 UVC 규격을 통한 플러그 앤 플레이를 지원합니다. 하드웨어 외부 트리거 및 스냅샷 제어는 Extension Unit(XU) 디스크립터에 할당된 GUID를 파싱하여 V4L2 사용자 정의 제어로 변환되어 구동됩니다.
+                </p>
+              </div>
+            </div>
+
+            <!-- Interactive Live Data Packet Simulation Button -->
+            <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+              <span class="text-xs text-slate-500">실시간 데이터 패킷 흐름 시뮬레이션:</span>
+              <button onclick="triggerPacketAnimation()" class="bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium px-4 py-2 rounded-lg flex items-center space-x-1.5 transition">
+                <i data-lucide="play-circle" class="w-4 h-4 text-emerald-400"></i>
+                <span>1080p 60fps 패킷 전송 시뮬레이션</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: AR0234CS 센서 & I2C 제어 -->
+    <section id="tab-i2c" class="tab-content hidden space-y-6">
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <h2 class="text-base font-bold text-slate-900 flex items-center space-x-2 mb-2">
+          <i data-lucide="sliders" class="w-5 h-5 text-blue-600"></i>
+          <span>onsemi AR0234CS 센서 사양 & I2C 레지스터 제어 아키텍처</span>
+        </h2>
+        <p class="text-xs text-slate-600 leading-relaxed">
+          센서 내부의 레지스터 제어는 Fast-mode I2C 2-wire 프로토콜을 통과합니다. 프레임의 중도 왜곡을 방지하기 위한 <span class="font-semibold text-slate-800">이중 버퍼링(Double Buffering)</span> 메커니즘과 지연 없는 해상도/프레임 프로필 전환을 위한 <span class="font-semibold text-slate-800">컨텍스트 스위칭(Context Switching)</span> 동작을 직접 시뮬레이션해보세요.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Interactive Double Buffering Register Simulator -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center space-x-2">
+              <i data-lucide="refresh-cw" class="w-4 h-4 text-amber-600"></i>
+              <span>이중 버퍼링(Double Buffering) 레지스터 시뮬레이터</span>
+            </h3>
+            <span class="text-xs bg-amber-50 text-amber-700 font-semibold px-2 py-0.5 rounded border border-amber-200">I2C Slave: 0x20</span>
+          </div>
+
+          <p class="text-xs text-slate-600 leading-relaxed">
+            I2C를 통해 `Exposure Time` 레지스터 값을 변경할 때, 즉시 `Live Register`에 반영되면 프레임 내 상하단 노출 차이(Bad Frame)가 발생합니다. 수신 데이터는 우선 `Pending Register`에 저장된 후, 프레임 시작점(Frame Start)의 블랭킹 구간에서 일괄 전송됩니다.
+          </p>
+
+          <!-- Control Input Area -->
+          <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
+            <div class="flex items-center justify-between">
+              <label class="font-bold text-slate-700">노출 시간 레지스터 설정 (`R0x3012`):</label>
+              <span id="slider-exposure-val" class="font-mono text-blue-600 font-bold text-sm">12.5 ms (0x04E2)</span>
+            </div>
+            <input type="range" id="input-exposure-slider" min="1" max="33" value="12" oninput="updateI2CPendingValue(this.value)" class="w-full accent-blue-600 cursor-pointer">
+            
+            <div class="flex justify-end space-x-2 pt-1">
+              <button onclick="writeI2CRegister()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 py-1.5 rounded-lg flex items-center space-x-1 transition">
+                <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                <span>I2C Write 요청 (0x20)</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Register State Visualization Blocks -->
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div class="bg-amber-50/70 border border-amber-200 p-3.5 rounded-xl text-center space-y-1">
+              <span class="text-amber-800 font-bold block">대기 레지스터 (Pending Register)</span>
+              <span class="text-slate-500 block text-[11px]">I2C 수신 데이터 수용 버퍼</span>
+              <div id="reg-pending-box" class="font-mono text-base font-black text-amber-700 bg-white py-1.5 rounded border border-amber-300 mt-2">
+                0x04E2 (12.5ms)
+              </div>
+            </div>
+
+            <div class="bg-emerald-50/70 border border-emerald-200 p-3.5 rounded-xl text-center space-y-1">
+              <span class="text-emerald-800 font-bold block">활성 레지스터 (Live Register)</span>
+              <span class="text-slate-500 block text-[11px]">현재 센서 파이프라인에 적용 중</span>
+              <div id="reg-live-box" class="font-mono text-base font-black text-emerald-700 bg-white py-1.5 rounded border border-emerald-300 mt-2">
+                0x04E2 (12.5ms)
+              </div>
+            </div>
+          </div>
+
+          <!-- Trigger Frame Start Blanking Button -->
+          <div class="pt-2">
+            <button onclick="triggerFrameStartVSync()" class="w-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-xl font-medium text-xs flex items-center justify-center space-x-2 shadow-sm transition">
+              <i data-lucide="zap" class="w-4 h-4 text-amber-400"></i>
+              <span>Frame Start (Dark Pixel Blanking 구간) 발생 시뮬레이션</span>
+            </button>
+            <p id="i2c-status-log" class="text-[11px] text-slate-500 text-center mt-2 font-mono">상태: 대기 중 - I2C 명령이 전달 대기 상태입니다.</p>
+          </div>
+        </div>
+
+        <!-- Context Switching & Register Mapping Table -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center space-x-2">
+              <i data-lucide="cpu" class="w-4 h-4 text-blue-600"></i>
+              <span>256x16 SRAM 컨텍스트 스위칭 (Context Switching)</span>
+            </h3>
+            <span class="text-xs bg-blue-50 text-blue-700 font-semibold px-2 py-0.5 rounded border border-blue-200">R0x30B0[13]</span>
+          </div>
+
+          <p class="text-xs text-slate-600 leading-relaxed">
+            AR0234CS는 내부 RAM에 두 개 이상의 해상도/프레임 프로필을 사전에 로딩해 두고, 단일 비트를 토글함으로써 즉각적인 해상도 전환을 수행합니다.
+          </p>
+
+          <!-- Context Switch Toggle Widget -->
+          <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center justify-between">
+            <div>
+              <span class="text-xs font-bold text-slate-800 block">현재 활성 컨텍스트:</span>
+              <span id="active-context-label" class="text-xs text-blue-600 font-mono font-bold">Context A (Full HD 1080p @ 60fps)</span>
+            </div>
+            <button onclick="toggleContextSwitch()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs px-3.5 py-2 rounded-lg flex items-center space-x-1.5 transition">
+              <i data-lucide="toggle-right" class="w-4 h-4"></i>
+              <span>`R0x30B0[13]` Bit Toggle</span>
+            </button>
+          </div>
+
+          <!-- Register Table Comparison -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="bg-slate-100 text-slate-700 border-b border-slate-200">
+                  <th class="p-2 font-bold">레지스터 주소</th>
+                  <th class="p-2 font-bold">기능 설명</th>
+                  <th class="p-2 font-bold text-blue-700">Context A (1080p)</th>
+                  <th class="p-2 font-bold text-emerald-700">Context B (720p)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-mono text-[11px] text-slate-700">
+                <tr>
+                  <td class="p-2 font-semibold">`0x3004`</td>
+                  <td class="p-2 font-sans">X_Addr_End</td>
+                  <td class="p-2 text-blue-700">1919 (0x077F)</td>
+                  <td class="p-2 text-emerald-700">1279 (0x04FF)</td>
+                </tr>
+                <tr>
+                  <td class="p-2 font-semibold">`0x3006`</td>
+                  <td class="p-2 font-sans">Y_Addr_End</td>
+                  <td class="p-2 text-blue-700">1079 (0x0437)</td>
+                  <td class="p-2 text-emerald-700">719 (0x02CF)</td>
+                </tr>
+                <tr>
+                  <td class="p-2 font-semibold">`0x300A`</td>
+                  <td class="p-2 font-sans">Frame_Length_Lines</td>
+                  <td class="p-2 text-blue-700">1125 (0x0465)</td>
+                  <td class="p-2 text-emerald-700">750 (0x02EE)</td>
+                </tr>
+                <tr>
+                  <td class="p-2 font-semibold">`0x3012`</td>
+                  <td class="p-2 font-sans">Coarse_Integration_Time</td>
+                  <td class="p-2 text-blue-700">0x04E2 (12.5ms)</td>
+                  <td class="p-2 text-emerald-700">0x0200 (5.1ms)</td>
+                </tr>
+                <tr>
+                  <td class="p-2 font-semibold">`0x301A`</td>
+                  <td class="p-2 font-sans">Reset_Register / Mode</td>
+                  <td class="p-2 text-blue-700">0x10DC (Pipelined)</td>
+                  <td class="p-2 text-emerald-700">0x10DC (Pipelined)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: UVC 토폴로지 & V4L2 매핑 -->
+    <section id="tab-uvc" class="tab-content hidden space-y-6">
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <h2 class="text-base font-bold text-slate-900 flex items-center space-x-2 mb-2">
+          <i data-lucide="terminal" class="w-5 h-5 text-blue-600"></i>
+          <span>UVC 디바이스 토폴로지 & Linux V4L2 `UVCIOC_CTRL_MAP` IOCTL 매핑</span>
+        </h2>
+        <p class="text-xs text-slate-600 leading-relaxed">
+          UVC 프로토콜은 내부 하드웨어를 엔터티(IT, PU, XU, OT) 단위로 모델링합니다. 표준에 정의되지 않은 외부 트리거 및 글로벌 셔터 특수 기능은 <span class="font-semibold text-slate-800">Extension Unit (XU)</span>을 사용하며, 리눅스 커널의 V4L2 서브시스템과 동적 IOCTL로 맵핑됩니다.
+        </p>
+      </div>
+
+      <!-- UVC Topology Visual Interactive Map -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <h3 class="text-sm font-bold text-slate-900">UVC 디바이스 내부 엔터티 토폴로지 구조</h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+          <!-- Input Terminal -->
+          <div onclick="selectUVCEntity('IT')" id="uvc-node-IT" class="uvc-node bg-slate-50 hover:bg-blue-50 border-2 border-slate-200 hover:border-blue-400 p-3.5 rounded-xl cursor-pointer transition">
+            <div class="flex items-center justify-between mb-1">
+              <span class="font-bold text-slate-900">Input Terminal (IT)</span>
+              <span class="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">Node ID: 0x01</span>
+            </div>
+            <p class="text-[11px] text-slate-500">물리적 AR0234CS 센서 노드. 초점, 조리개, 수동/자동 노출 제어 명령 도달</p>
+          </div>
+
+          <!-- Processing Unit -->
+          <div onclick="selectUVCEntity('PU')" id="uvc-node-PU" class="uvc-node bg-slate-50 hover:bg-blue-50 border-2 border-slate-200 hover:border-blue-400 p-3.5 rounded-xl cursor-pointer transition">
+            <div class="flex items-center justify-between mb-1">
+              <span class="font-bold text-slate-900">Processing Unit (PU)</span>
+              <span class="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">Node ID: 0x02</span>
+            </div>
+            <p class="text-[11px] text-slate-500">ISP 가공 로직. 밝기, 대비, 감마, AWB, 전원 주파수 플리커 제어</p>
+          </div>
+
+          <!-- Extension Unit -->
+          <div onclick="selectUVCEntity('XU')" id="uvc-node-XU" class="uvc-node bg-blue-50 border-2 border-blue-500 p-3.5 rounded-xl cursor-pointer transition shadow-sm">
+            <div class="flex items-center justify-between mb-1">
+              <span class="font-bold text-blue-900">Extension Unit (XU)</span>
+              <span class="text-[10px] bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded font-bold">Node ID: 0x03</span>
+            </div>
+            <p class="text-[11px] text-blue-700 font-medium">제조사 고유 제어. HW 트리거 모드, 플래시 동기화 지연, 레지스터 직결</p>
+          </div>
+
+          <!-- Output Terminal -->
+          <div onclick="selectUVCEntity('OT')" id="uvc-node-OT" class="uvc-node bg-slate-50 hover:bg-blue-50 border-2 border-slate-200 hover:border-blue-400 p-3.5 rounded-xl cursor-pointer transition">
+            <div class="flex items-center justify-between mb-1">
+              <span class="font-bold text-slate-900">Output Terminal (OT)</span>
+              <span class="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">Node ID: 0x04</span>
+            </div>
+            <p class="text-[11px] text-slate-500">USB EP0/EP1 최종 스트리밍 출구. 호스트 버스 인터페이스 연결</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Linux V4L2 Control Mapping Code Generator -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Control Selection & Specs (Left 5 cols) -->
+        <div class="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <h3 class="text-sm font-bold text-slate-900 flex items-center space-x-2">
+            <i data-lucide="code-2" class="w-4 h-4 text-emerald-600"></i>
+            <span>V4L2 Control Mapper 파라미터</span>
+          </h3>
+
+          <div class="space-y-3 text-xs">
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">제어할 XU 벤더 기능 선택:</label>
+              <select id="select-xu-control" onchange="generateV4L2Code()" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 font-semibold focus:outline-none focus:border-blue-500">
+                <option value="trigger_mode">1. 하드웨어 외부 트리거 모드 (Pulsed/Sync)</option>
+                <option value="strobe_delay">2. 스트로브 플래시 지연 시간 (Flash-lead/lag µs)</option>
+                <option value="direct_reg">3. 센서 I2C 레지스터 직접 쓰기/읽기</option>
+                <option value="roi_crop">4. 관심 영역 (ROI) 크롭 매핑</option>
+              </select>
+            </div>
+
+            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5">
+              <div class="flex justify-between"><span class="text-slate-500">XU GUID:</span><span id="xu-val-guid" class="font-mono text-slate-800">48-61-6d-70-6f-74-65-63-68-41-52-30-32-33-34-00</span></div>
+              <div class="flex justify-between"><span class="text-slate-500">Unit ID / Selector:</span><span id="xu-val-selector" class="font-mono text-slate-800">bUnitID = 0x03, Selector = 0x01</span></div>
+              <div class="flex justify-between"><span class="text-slate-500">Data Size / Offset:</span><span id="xu-val-size" class="font-mono text-slate-800">size = 8 bits, offset = 0</span></div>
+            </div>
+
+            <!-- Standard Request Tester -->
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">UVC Control Request 테스트:</label>
+              <div class="grid grid-cols-3 gap-2">
+                <button onclick="testUVCRequest('SET_CUR')" class="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold p-2 rounded border border-blue-200 text-center">SET_CUR</button>
+                <button onclick="testUVCRequest('GET_CUR')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold p-2 rounded border border-emerald-200 text-center">GET_CUR</button>
+                <button onclick="testUVCRequest('GET_INFO')" class="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold p-2 rounded border border-purple-200 text-center">GET_INFO</button>
+              </div>
+            </div>
+            <div id="uvc-req-result" class="bg-slate-900 text-emerald-400 p-2.5 rounded-lg font-mono text-[11px] hidden">
+              <!-- Result filled by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Generated C Code Box (Right 7 cols) -->
+        <div class="lg:col-span-7 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <span class="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
+              <i data-lucide="file-code" class="w-4 h-4 text-blue-600"></i>
+              <span>리눅스 C/C++ `uvc_xu_control_mapping` 소스 코드</span>
+            </span>
+            <span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">IOCTL: UVCIOC_CTRL_MAP</span>
+          </div>
+
+          <pre id="v4l2-code-block" class="bg-slate-900 text-slate-100 p-4 rounded-xl font-mono text-[11px] leading-relaxed overflow-x-auto border border-slate-800">
+/* 자동 생성된 V4L2 Control Mapping C 코드 */
+          </pre>
+
+          <!-- Error Code Reference Box -->
+          <div class="bg-amber-50/80 border border-amber-200 p-3 rounded-xl text-xs space-y-1">
+            <span class="font-bold text-amber-900 flex items-center space-x-1">
+              <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-amber-600"></i>
+              <span>IOCTL 리턴 POSIX 에러 코드 처리 가이드</span>
+            </span>
+            <div class="grid grid-cols-3 gap-2 text-[11px] pt-1">
+              <div><span class="font-mono font-bold text-amber-800">EPERM:</span> 권한 부족 (`sudo` 실행 필요)</div>
+              <div><span class="font-mono font-bold text-amber-800">EEXIST:</span> 이미 매핑된 컨트롤 ID</div>
+              <div><span class="font-mono font-bold text-amber-800">EOVERFLOW:</span> 페이로드 바이트 크기 초과</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: 대역폭 & USB 페이로드 -->
+    <section id="tab-bandwidth" class="tab-content hidden space-y-6">
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <h2 class="text-base font-bold text-slate-900 flex items-center space-x-2 mb-2">
+          <i data-lucide="bar-chart-3" class="w-5 h-5 text-blue-600"></i>
+          <span>비디오 데이터 대역폭 시뮬레이터 & USB 페이로드 프로토콜</span>
+        </h2>
+        <p class="text-xs text-slate-600 leading-relaxed">
+          USB 2.0의 실효 대역폭(~350 Mbps) 한계로 인해 비압축 YUY2 포맷과 압축 MJPEG 포맷의 전송 가능성이 극명하게 갈립니다. 아래 계산기로 해상도와 FPS에 따른 실시간 대역폭 요구량을 확인하고 `wMaxPacketSize` 인코딩 메커니즘을 분석하세요.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Sliders & Controls (Left 5 cols) -->
+        <div class="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <h3 class="text-sm font-bold text-slate-900">비디오 파라미터 대역폭 실시간 설정</h3>
+
+          <div class="space-y-3 text-xs">
+            <!-- Resolution Picker -->
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">해상도 (Resolution):</label>
+              <select id="bw-res-select" onchange="recalculateBandwidth()" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-semibold">
+                <option value="1920x1080" selected>1080p Full HD (1920 x 1080)</option>
+                <option value="1920x1200">2.3MP Full Form (1920 x 1200)</option>
+                <option value="1280x720">720p HD (1280 x 720)</option>
+                <option value="640x480">VGA (640 x 480)</option>
+              </select>
+            </div>
+
+            <!-- Frame Rate Slider -->
+            <div>
+              <div class="flex justify-between mb-1">
+                <label class="font-bold text-slate-700">프레임 레이트 (FPS):</label>
+                <span id="bw-fps-val" class="font-mono font-bold text-blue-600">60 FPS</span>
+              </div>
+              <input type="range" id="bw-fps-slider" min="15" max="120" step="15" value="60" oninput="recalculateBandwidth()" class="w-full accent-blue-600 cursor-pointer">
+            </div>
+
+            <!-- Bandwidth Formula Output Box -->
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2 font-mono">
+              <div class="text-[11px] text-slate-500">YUY2 (16bpp) 비압축 공식:</div>
+              <div id="formula-yuy2" class="text-xs font-bold text-slate-900">1920 x 1080 x 16 x 60 = 1.99 Gbps</div>
+              <div class="text-[11px] text-slate-500 pt-1">MJPEG 압축 예상 대역폭:</div>
+              <div id="formula-mjpeg" class="text-xs font-bold text-emerald-600">약 48.0 Mbps (압축률 ~20:1)</div>
+            </div>
+
+            <!-- USB Bus Status Card -->
+            <div id="usb-status-box" class="p-3 rounded-xl border text-xs font-bold space-y-1 bg-emerald-50 text-emerald-900 border-emerald-200">
+              <div class="flex items-center space-x-1.5">
+                <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>
+                <span id="usb-status-title">USB 2.0 (MJPEG) 전송 가능</span>
+              </div>
+              <p id="usb-status-desc" class="text-[11px] font-normal text-emerald-800">
+                MJPEG 포맷은 USB 2.0 버스의 가용 대역폭(350 Mbps) 이내에서 프레임 드롭 없이 안정적으로 구동됩니다.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dynamic Chart.js Visualization (Right 7 cols) -->
+        <div class="lg:col-span-7 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-slate-900 mb-1">대역폭 비교 차트 (Mbps vs USB 버스 한계)</h3>
+            <p class="text-xs text-slate-500 mb-4">비압축 YUY2 vs 압축 MJPEG 대역폭 요구량과 USB 버스 실효 한계선 비교</p>
+            
+            <!-- Chart Container Div with strictly managed responsive size -->
+            <div class="chart-container">
+              <canvas id="bandwidthChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- USB 2.0 High-Bandwidth Isochronous & Payload Header Decoder Section -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- wMaxPacketSize Shift Decoder -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center space-x-2">
+              <i data-lucide="binary" class="w-4 h-4 text-blue-600"></i>
+              <span>`wMaxPacketSize` 비트 시프트 디코더 (0x1400)</span>
+            </h3>
+            <span class="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded">High-Bandwidth Isoch</span>
+          </div>
+
+          <p class="text-xs text-slate-600 leading-relaxed">
+            USB 2.0 등시성 전송 시 마이크로프레임(125µs)당 최대 3회의 트랜잭션을 수행하기 위해 `wMaxPacketSize` 필드에 특별한 비트 인코딩이 적용됩니다.
+          </p>
+
+          <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs font-mono">
+            <div class="flex items-center justify-between">
+              <span>레지스터 Hex 값:</span>
+              <span class="font-bold text-blue-600 text-sm">0x1400 (2진수: 0001 0100 0000 0000)</span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2 text-[11px]">
+              <div class="bg-white p-2.5 rounded border border-slate-200">
+                <span class="text-slate-500 block">Bits 10:0 (Packet Size):</span>
+                <span class="font-bold text-slate-800">1024 Bytes / Transaction</span>
+              </div>
+              <div class="bg-white p-2.5 rounded border border-slate-200">
+                <span class="text-slate-500 block">Bits 12:11 (Mult Flag):</span>
+                <span class="font-bold text-emerald-600">2 (추가 2회 = 총 3회)</span>
+              </div>
+            </div>
+
+            <div class="bg-blue-50 p-3 rounded-lg border border-blue-200 text-blue-900 text-[11px]">
+              <strong>연산 결과 스루풋:</strong> 3 x 1024 Bytes / 125 µs = <strong>24.57 MB/s (약 196.5 Mbps)</strong> 고정 할당
+            </div>
+          </div>
+        </div>
+
+        <!-- UVC Payload Header Inspector -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center space-x-2">
+              <i data-lucide="file-check-2" class="w-4 h-4 text-emerald-600"></i>
+              <span>UVC Payload Header 필드 파서</span>
+            </h3>
+            <span class="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-mono">2 ~ 12 Bytes Header</span>
+          </div>
+
+          <p class="text-xs text-slate-600 leading-relaxed">
+            모든 USB 비디오 패킷의 최상단에는 프레임 동기화 및 타임스탬프 관리를 위한 UVC 페이로드 헤더가 부착됩니다.
+          </p>
+
+          <div class="space-y-2 text-xs">
+            <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex justify-between items-center">
+              <div>
+                <span class="font-bold text-slate-800 font-mono">HLE (Header Length):</span>
+                <span class="text-slate-500 text-[11px] block">헤더 전체 바이트 크기 (예: 12 Bytes)</span>
+              </div>
+              <span class="bg-slate-200 text-slate-700 font-mono font-bold px-2 py-1 rounded">0x0C</span>
+            </div>
+
+            <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex justify-between items-center">
+              <div>
+                <span class="font-bold text-slate-800 font-mono">BFH (Bit Field Header):</span>
+                <span class="text-slate-500 text-[11px] block">FID(비트0 토글), EOF(비트1 프레임끝), PTS, SCR</span>
+              </div>
+              <span id="header-bfh-val" class="bg-blue-100 text-blue-800 font-mono font-bold px-2 py-1 rounded">0x8D (FID=1, EOF=0)</span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-[11px]">
+              <div class="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                <span class="font-bold text-slate-700 block">PTS (Presentation Time):</span>
+                <span class="font-mono text-slate-600">32-bit HW 클럭 타임스탬프</span>
+              </div>
+              <div class="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                <span class="font-bold text-slate-700 block">SCR (Source Clock Ref):</span>
+                <span class="font-mono text-slate-600">48-bit 클럭 + USB SOF 넘버</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: 글로벌 셔터 & 트리거 시뮬레이터 -->
+    <section id="tab-shutter" class="tab-content hidden space-y-6">
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <h2 class="text-base font-bold text-slate-900 flex items-center space-x-2 mb-2">
+          <i data-lucide="camera" class="w-5 h-5 text-blue-600"></i>
+          <span>글로벌 셔터 노이즈 비교 & 외부 하드웨어 트리거 시뮬레이터</span>
+        </h2>
+        <p class="text-xs text-slate-600 leading-relaxed">
+          고속 이동 피사체 촬영 시 롤링 셔터의 기하학적 젤로 왜곡(Skew) 및 플래시 부분 노출(Partial Flash) 현상과 글로벌 셔터의 정밀 동결(Freeze) 이미지를 비교해보세요. 또한, 나노초(ns) 단위 외부 트리거 모드와 노출한계 공식을 검증할 수 있습니다.
+        </p>
+      </div>
+
+      <!-- Shutter Mode Comparison Interactive Canvas -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="text-sm font-bold text-slate-900">롤링 셔터 vs 글로벌 셔터 고속 피사체 인터랙티브 비교</h3>
+            <p class="text-xs text-slate-500">회전하는 프로펠러/고속 차량 포착 시 스캔 방식 차이 시뮬레이션</p>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <button onclick="setShutterMode('global')" id="btn-shutter-global" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white transition">
+              글로벌 셔터 (Global Shutter)
+            </button>
+            <button onclick="setShutterMode('rolling')" id="btn-shutter-rolling" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 transition">
+              롤링 셔터 (Rolling Shutter)
+            </button>
+          </div>
+        </div>
+
+        <!-- Canvas Visualizer Container -->
+        <div class="relative w-full h-64 bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border border-slate-800">
+          <canvas id="shutterCanvas" class="w-full h-full block"></canvas>
+          
+          <!-- Mode Overlay Tag -->
+          <div class="absolute top-3 left-3 bg-slate-900/90 text-white text-xs font-mono px-2.5 py-1 rounded-md border border-slate-700 flex items-center space-x-1.5">
+            <span id="shutter-canvas-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="shutter-canvas-mode-title">글로벌 셔터 모드: 동시 수광 (왜곡 없음)</span>
+          </div>
+        </div>
+
+        <!-- Canvas Motion Controls -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <label class="font-bold text-slate-700 block mb-1">피사체 회전 속도 (RPM):</label>
+            <input type="range" id="shutter-speed-slider" min="1" max="10" value="5" oninput="updateShutterSpeed(this.value)" class="w-full accent-blue-600 cursor-pointer">
+          </div>
+
+          <button onclick="triggerFlashStrobe()" class="bg-amber-500 hover:bg-amber-600 text-white font-bold p-3 rounded-lg flex items-center justify-center space-x-1.5 transition">
+            <i data-lucide="zap" class="w-4 h-4"></i>
+            <span>스트로브 조명 플래시 발생 (FLASH Pin)</span>
+          </button>
+
+          <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-col justify-center">
+            <span class="text-slate-500 text-[11px]">왜곡 상태 평가:</span>
+            <span id="shutter-evaluation-text" class="font-bold text-emerald-600">완벽한 기하학적 형태 보존 (0% Skew)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hardware Trigger Modes & Exposure Calculation Formula -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Trigger Mode Mechanics (Left 6 cols) -->
+        <div class="lg:col-span-6 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <h3 class="text-sm font-bold text-slate-900 flex items-center space-x-2">
+            <i data-lucide="cpu" class="w-4 h-4 text-amber-600"></i>
+            <span>하드웨어 외부 트리거 프로토콜 모드</span>
+          </h3>
+
+          <div class="space-y-3 text-xs">
+            <!-- Pulsed Mode Card -->
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-slate-900">1. Pulsed Mode (펄스 모드)</span>
+                <span class="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold">TRIG 핀 High &gt; 125ns</span>
+              </div>
+              <p class="text-[11px] text-slate-600 leading-relaxed">
+                센서가 Standby 상태에서 외부 `TRIG` 신호 입력을 대기합니다. High 펄스 인가 즉시 센서 내부 노출 레지스터 값에 지정된 시간 동안 단일 프레임 촬영을 개시합니다.
+              </p>
+            </div>
+
+            <!-- Sync-Sink Mode Card -->
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-slate-900">2. Sync-Sink Mode (동기화 싱크 모드)</span>
+                <span class="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold">최대 120 fps 위상 잠금</span>
+              </div>
+              <p class="text-[11px] text-slate-600 leading-relaxed">
+                파이프라인 스트리밍을 유지하면서 프레임 시작 타이밍만을 외부 `TRIG` 위상에 잠금(Phase-Lock)시킵니다. 판독과 다음 노출이 오버랩되어 최대 프레임 레이트를 달성합니다.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Exposure Limit Formula Calculator (Right 6 cols) -->
+        <div class="lg:col-span-6 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <h3 class="text-sm font-bold text-slate-900 flex items-center space-x-2">
+            <i data-lucide="calculator" class="w-4 h-4 text-emerald-600"></i>
+            <span>외부 트리거 노출시간 한계 계산기</span>
+          </h3>
+
+          <p class="text-xs text-slate-600 leading-relaxed">
+            외부 트리거 환경에서는 자동 노출(AE)이 발산할 수 있으므로 수동 노출 모드가 강제됩니다. 아래 공식을 만족해야 파이프라인 충돌이 방지됩니다.
+          </p>
+
+          <div class="bg-slate-900 text-slate-100 p-3.5 rounded-xl font-mono text-[11px] space-y-1">
+            <div class="text-amber-400 font-bold">노출시간 임계 공식:</div>
+            <div>Exposure_Max &lt; Trigger_Period - (1 / Max_FPS) - 1.6 ms</div>
+          </div>
+
+          <div class="space-y-3 text-xs">
+            <div>
+              <div class="flex justify-between mb-1">
+                <label class="font-bold text-slate-700">트리거 주기 (Trigger Period):</label>
+                <span id="trig-period-val" class="font-mono text-blue-600 font-bold">20.0 ms (50 Hz)</span>
+              </div>
+              <input type="range" id="trig-period-slider" min="10" max="50" value="20" oninput="calculateTriggerExposure(this.value)" class="w-full accent-blue-600 cursor-pointer">
+            </div>
+
+            <div class="bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-xs space-y-1">
+              <span class="text-emerald-800 font-bold block">허용 가능한 최대 수동 노출 시간:</span>
+              <span id="trig-max-exp-result" class="font-mono text-base font-black text-emerald-700">10.07 ms (10,070 µs)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Global Footer -->
+  <footer class="bg-white border-t border-slate-200 py-4 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between text-xs text-slate-500 gap-2">
+      <div>
+        <span>Hampotech AR0234 2MP USB Global Shutter Camera Protocol Workbench</span>
+      </div>
+      <div class="flex items-center space-x-3">
+        <span>UVC 1.1/1.5 Compliant</span>
+        <span>·</span>
+        <span>MIPI CSI-2 D-PHY</span>
+        <span>·</span>
+        <span>V4L2 Subsystem</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- JavaScript Application Logic -->
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // ------------------------------------------------------------------
+    // Tab Navigation Switcher Logic
+    // ------------------------------------------------------------------
+    function switchTab(tabId) {
+      // Hide all contents
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      // Remove active styles from buttons
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('tab-active');
+        btn.classList.add('text-slate-600');
+      });
+
+      // Show target tab
+      const targetTab = document.getElementById(tabId);
+      if (targetTab) {
+        targetTab.classList.remove('hidden');
+      }
+
+      // Highlight active button
+      const activeBtn = document.getElementById('btn-' + tabId);
+      if (activeBtn) {
+        activeBtn.classList.add('tab-active');
+        activeBtn.classList.remove('text-slate-600');
+      }
+
+      // Re-trigger Canvas render if shutter tab is active
+      if (tabId === 'tab-shutter') {
+        setTimeout(initShutterCanvas, 50);
+      }
+      // Re-trigger Chart resize if bandwidth tab is active
+      if (tabId === 'tab-bandwidth' && bandwidthChart) {
+        setTimeout(() => bandwidthChart.resize(), 50);
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // TAB 1: Protocol Stack Layer Inspector Data
+    // ------------------------------------------------------------------
+    const stackData = {
+      5: {
+        title: "호스트 OS & V4L2 / UVC 서브시스템",
+        bus: "Protocol: V4L2 IOCTL / DirectShow API",
+        desc: "호스트 OS(Linux/Windows)의 사용자 공간 애플리케이션이 카메라와 소통하는 최종 응용 계층입니다. 표준 UVC 1.1/1.5 드라이버를 통해 컨트롤을 조작하며, 커널 공간의 uvcvideo 드라이버가 UVCIOC_CTRL_MAP IOCTL 메커니즘을 수행하여 벤더 고유 확장 유닛(XU)을 V4L2 컨트롤로 매핑합니다.",
+        p1: ["드라이버 연동:", "uvcvideo (리눅스 커널 내장)"],
+        p2: ["XU 제어 방식:", "16-Byte GUID + IOCTL 매핑"],
+        p3: ["비디오 버퍼링:", "V4L2 mmap / DMABUF Queue"],
+        p4: ["동기화 프레임 획득:", "PTS / SCR 타임스탬프 검증"],
+        note: "별도의 벤더 드라이버 설치 없이 UVC 규격을 통한 플러그 앤 플레이를 지원합니다. 하드웨어 외부 트리거 및 스냅샷 제어는 Extension Unit(XU) 디스크립터에 할당된 GUID를 파싱하여 V4L2 사용자 정의 제어로 변환되어 구동됩니다."
+      },
+      4: {
+        title: "USB 2.0 / 3.0 버스 전송 계층",
+        bus: "Bus: High-Speed (480Mbps) / SuperSpeed (5Gbps)",
+        desc: "ISP에서 생성된 패킷을 USB 물리 버스로 실어나르는 계층입니다. 비압축 YUY2 및 압축 MJPEG 데이터는 엔드포인트 디스크립터의 wMaxPacketSize (0x1400: 마이크로프레임당 3회 트랜잭션 = 24.57MB/s) 설정을 활용한 고대역폭 아이소크로너스 전송으로 유실 없이 전송됩니다.",
+        p1: ["USB 규격:", "USB 2.0 High-Speed / USB 3.0"],
+        p2: ["전송 모드:", "High-Bandwidth Isochronous"],
+        p3: ["최대 패킷 사이즈:", "3 x 1024 Bytes / 125 µs"],
+        p4: ["페이로드 헤더:", "2~12 Bytes (BFH, FID, EOF)"],
+        note: "USB 2.0 환경에서는 가용 대역폭(~350 Mbps) 제약으로 인해 1080p 60fps 전송 시 MJPEG 압축 파이프라인 전송이 필수적이며, USB 3.0 연결 시 비압축 YUY2 (1.99 Gbps) 스트리밍이 가능해집니다."
+      },
+      3: {
+        title: "ISP 파이프라인 & UVC 엔지니어링",
+        bus: "Internal Processing: De-Bayer, AWB, AE, MJPEG Encoder",
+        desc: "AR0234CS 센서에서 입력된 Raw Bayer 신호를 받아 색상 교정(CCM), 디베이어링, 감마 보정, AWB, AE 알고리즘을 실시간 처리합니다. 동시에 UVC 클래스 요청(SET_CUR, GET_CUR 등) 및 확장 유닛(XU) 커맨드를 수신하여 I2C 버스를 통해 센서 상태를 조율합니다.",
+        p1: ["입력 데이터 포맷:", "10-bit / 8-bit Raw Bayer"],
+        p2: ["출력 데이터 포맷:", "YUV422 (YUY2) / MJPEG"],
+        p3: ["UVC 호환성:", "UVC 1.1 / UVC 1.5 규격"],
+        p4: ["확장 컨트롤 처리:", "XU Descriptor 파싱 및 처리"],
+        note: "ISP 내부 펌웨어는 호스트로부터 전달된 UVC Control Request를 해석하고, 필요 시 I2C 마스터 컨트롤러를 통해 AR0234CS 센서의 16비트 레지스터 공간에 변경 사항을 수록합니다."
+      },
+      2: {
+        title: "MIPI CSI-2 & I2C 제어 버스",
+        bus: "Bus: 4-Lane MIPI D-PHY (3.6Gbps) + Fast-mode I2C",
+        desc: "센서와 ISP 간의 내부 데이터 및 제어 통신을 담당합니다. 영상 데이터는 전자기 간섭(EMI)이 적은 MIPI CSI-2 차동 신호 4개 레인을 통해 최대 3.6 Gbps 속도로 펌핑되며, 제어 신호는 I2C 버스(Slave ID 0x20)를 통과합니다.",
+        p1: ["MIPI 레인 구성:", "1 / 2 / 4-Lane 프로그래머블"],
+        p2: ["레인당 대역폭:", "최대 900 Mbps (총 3.6 Gbps)"],
+        p3: ["I2C 주소 체계:", "8-bit Write 0x20 / Read 0x21"],
+        p4: ["레지스터 오프셋:", "16-bit 레지스터 주소 공간"],
+        note: "센서 레지스터 설정 시 프레임의 왜곡을 막기 위해 대기 레지스터(Pending Register)에 저장한 후 프레임 시작 블랭킹 구간에 활성 레지스터(Live Register)로 일괄 이관하는 이중 버퍼링을 수행합니다."
+      },
+      1: {
+        title: "AR0234CS 글로벌 셔터 센서 코어",
+        bus: "Physical: 1/2.6\" Optical Format CMOS",
+        desc: "onsemi사의 2.3MP 글로벌 셔터 CMOS 디지털 이미지 센서입니다. 1920x1200 해상도에서 픽셀 배열 전체가 동시 노출되어 모션 아티팩트를 근원 차단합니다. TRIG 입력 핀과 FLASH 스트로브 출력 핀을 내장하고 있습니다.",
+        p1: ["유효 픽셀 배열:", "1920(H) x 1200(V) (2.3MP)"],
+        p2: ["픽셀 크기:", "3.0 µm x 3.0 µm"],
+        p3: ["최대 프레임 레이트:", "120 fps @ Full Resolution"],
+        p4: ["트리거 핀 사양:", "1.8V Logic TRIG / FLASH Pin"],
+        note: "글로벌 셔터 아키텍처는 수백만 픽셀 각각에 차폐 메모리 노드가 내장되어 있어, 광학적 젤로 현상이나 스트로브 조명 연동 시 가로 밴딩 노이즈가 전혀 발생하지 않습니다."
+      }
+    };
+
+    function selectStackLayer(layerNum) {
+      // Update Card Visual Borders
+      for (let i = 1; i <= 5; i++) {
+        const card = document.getElementById(`layer-card-${i}`);
+        if (i === layerNum) {
+          card.classList.add('border-blue-500');
+          card.classList.remove('border-slate-200');
+        } else {
+          card.classList.remove('border-blue-500');
+          card.classList.add('border-slate-200');
+        }
+      }
+
+      // Update Detail Column Content
+      const data = stackData[layerNum];
+      document.getElementById('stack-detail-badge').innerText = `L${layerNum} Layer Details`;
+      document.getElementById('stack-detail-bus').innerText = data.bus;
+      document.getElementById('stack-detail-title').innerText = data.title;
+      document.getElementById('stack-detail-desc').innerText = data.desc;
+      document.getElementById('stack-detail-note').innerText = data.note;
+
+      const propsDiv = document.getElementById('stack-detail-props');
+      propsDiv.innerHTML = `
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+          <span class="text-slate-500 block mb-0.5">${data.p1[0]}</span>
+          <span class="font-bold text-slate-800">${data.p1[1]}</span>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+          <span class="text-slate-500 block mb-0.5">${data.p2[0]}</span>
+          <span class="font-bold text-slate-800">${data.p2[1]}</span>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+          <span class="text-slate-500 block mb-0.5">${data.p3[0]}</span>
+          <span class="font-bold text-slate-800">${data.p3[1]}</span>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+          <span class="text-slate-500 block mb-0.5">${data.p4[0]}</span>
+          <span class="font-bold text-slate-800">${data.p4[1]}</span>
+        </div>
+      `;
+    }
+
+    function triggerPacketAnimation() {
+      alert("1080p 60fps 비디오 패킷 파이프라인 시뮬레이션:\n\n1. AR0234CS 픽셀 수광 (16.6ms 노출)\n2. MIPI CSI-2 4-Lane 3.6Gbps 전송\n3. ISP MJPEG 엔코딩 (압축비 20:1)\n4. USB 2.0 EP1 Isochronous 24.57MB/s 전송\n5. V4L2 mmap 버퍼 큐 수신 완료!");
+    }
+
+    // ------------------------------------------------------------------
+    // TAB 2: I2C & Double Buffering Logic
+    // ------------------------------------------------------------------
+    let pendingExposureHex = "0x04E2";
+    let pendingExposureMs = "12.5";
+
+    function updateI2CPendingValue(val) {
+      const ms = parseFloat(val).toFixed(1);
+      const regVal = Math.round(val * 100);
+      const hexStr = "0x" + regVal.toString(16).padStart(4, '0').toUpperCase();
+      
+      document.getElementById('slider-exposure-val').innerText = `${ms} ms (${hexStr})`;
+      pendingExposureHex = hexStr;
+      pendingExposureMs = ms;
+    }
+
+    function writeI2CRegister() {
+      document.getElementById('reg-pending-box').innerText = `${pendingExposureHex} (${pendingExposureMs}ms)`;
+      document.getElementById('i2c-status-log').innerText = `[I2C Write Success] Pending Register updated to ${pendingExposureHex}. Waiting for VSync Frame Start...`;
+      document.getElementById('i2c-status-log').className = "text-[11px] text-amber-600 text-center mt-2 font-mono font-bold";
+    }
+
+    function triggerFrameStartVSync() {
+      const pendingText = document.getElementById('reg-pending-box').innerText;
+      document.getElementById('reg-live-box').innerText = pendingText;
+      document.getElementById('i2c-status-log').innerText = `[Frame Start Blanking] Pending -> Live Register Transfer Complete! Active Exposure: ${pendingText}`;
+      document.getElementById('i2c-status-log').className = "text-[11px] text-emerald-600 text-center mt-2 font-mono font-bold";
+    }
+
+    let currentContext = 'A';
+    function toggleContextSwitch() {
+      const label = document.getElementById('active-context-label');
+      if (currentContext === 'A') {
+        currentContext = 'B';
+        label.innerText = "Context B (HD 720p @ 120fps)";
+        label.className = "text-xs text-emerald-600 font-mono font-bold";
+      } else {
+        currentContext = 'A';
+        label.innerText = "Context A (Full HD 1080p @ 60fps)";
+        label.className = "text-xs text-blue-600 font-mono font-bold";
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // TAB 3: UVC Topology & V4L2 Mapping Logic
+    // ------------------------------------------------------------------
+    const xuSpecs = {
+      trigger_mode: {
+        guid: "48-61-6d-70-6f-74-65-63-68-41-30-32-33-34-01",
+        selector: "bUnitID = 0x03, Selector = 0x01",
+        size: "size = 8 bits, offset = 0",
+        v4l2_id: "V4L2_CID_USER_HAMPO_TRIG_MODE",
+        name: "Hardware Trigger Mode",
+        code: `/* V4L2 Mapping C Code: HW Trigger Mode */
+struct uvc_xu_control_mapping map_trig = {
+    .id        = V4L2_CID_USER_BASE + 0x1001,
+    .name      = "HW External Trigger Mode",
+    .entity    = {0x48, 0x61, 0x6d, 0x70, 0x6f, 0x74, 0x65, 0x63, 0x68, 0x41, 0x30, 0x32, 0x33, 0x34, 0x00, 0x01},
+    .selector  = 1, // Control Selector 1
+    .size      = 8, // 1 Byte payload
+    .offset    = 0,
+    .v4l2_type = V4L2_CTRL_TYPE_INTEGER,
+    .data_type = UVC_CTRL_DATA_TYPE_UNSIGNED,
+};
+ioctl(fd, UVCIOC_CTRL_MAP, &map_trig);`
+      },
+      strobe_delay: {
+        guid: "48-61-6d-70-6f-74-65-63-68-41-30-32-33-34-02",
+        selector: "bUnitID = 0x03, Selector = 0x02",
+        size: "size = 16 bits, offset = 0",
+        v4l2_id: "V4L2_CID_USER_HAMPO_FLASH_DELAY",
+        name: "Flash Strobe Delay",
+        code: `/* V4L2 Mapping C Code: Strobe Flash Lead/Lag */
+struct uvc_xu_control_mapping map_flash = {
+    .id        = V4L2_CID_USER_BASE + 0x1002,
+    .name      = "Strobe Flash Lead/Lag Delay (us)",
+    .entity    = {0x48, 0x61, 0x6d, 0x70, 0x6f, 0x74, 0x65, 0x63, 0x68, 0x41, 0x30, 0x32, 0x33, 0x34, 0x00, 0x02},
+    .selector  = 2, // Control Selector 2
+    .size      = 16, // 2 Bytes payload
+    .offset    = 0,
+    .v4l2_type = V4L2_CTRL_TYPE_INTEGER,
+    .data_type = UVC_CTRL_DATA_TYPE_UNSIGNED,
+};
+ioctl(fd, UVCIOC_CTRL_MAP, &map_flash);`
+      },
+      direct_reg: {
+        guid: "48-61-6d-70-6f-74-65-63-68-41-30-32-33-34-03",
+        selector: "bUnitID = 0x03, Selector = 0x03",
+        size: "size = 32 bits, offset = 0",
+        v4l2_id: "V4L2_CID_USER_HAMPO_REG_DIRECT",
+        name: "Direct I2C Register RW",
+        code: `/* V4L2 Mapping C Code: Direct I2C Register Access */
+struct uvc_xu_control_mapping map_reg = {
+    .id        = V4L2_CID_USER_BASE + 0x1003,
+    .name      = "Sensor Register Direct Access",
+    .entity    = {0x48, 0x61, 0x6d, 0x70, 0x6f, 0x74, 0x65, 0x63, 0x68, 0x41, 0x30, 0x32, 0x33, 0x34, 0x00, 0x03},
+    .selector  = 3, // Control Selector 3
+    .size      = 32, // 4 Bytes payload (Address + Data)
+    .offset    = 0,
+    .v4l2_type = V4L2_CTRL_TYPE_INTEGER,
+    .data_type = UVC_CTRL_DATA_TYPE_RAW,
+};
+ioctl(fd, UVCIOC_CTRL_MAP, &map_reg);`
+      },
+      roi_crop: {
+        guid: "48-61-6d-70-6f-74-65-63-68-41-30-32-33-34-04",
+        selector: "bUnitID = 0x03, Selector = 0x04",
+        size: "size = 64 bits, offset = 0",
+        v4l2_id: "V4L2_CID_USER_HAMPO_ROI_CROP",
+        name: "ROI Window Crop",
+        code: `/* V4L2 Mapping C Code: ROI Window Crop */
+struct uvc_xu_control_mapping map_roi = {
+    .id        = V4L2_CID_USER_BASE + 0x1004,
+    .name      = "Sensor ROI Hardware Window",
+    .entity    = {0x48, 0x61, 0x6d, 0x70, 0x6f, 0x74, 0x65, 0x63, 0x68, 0x41, 0x30, 0x32, 0x33, 0x34, 0x00, 0x04},
+    .selector  = 4,
+    .size      = 64, // 8 Bytes (X, Y, W, H)
+    .offset    = 0,
+    .v4l2_type = V4L2_CTRL_TYPE_INTEGER,
+    .data_type = UVC_CTRL_DATA_TYPE_UNSIGNED,
+};
+ioctl(fd, UVCIOC_CTRL_MAP, &map_roi);`
+      }
+    };
+
+    function generateV4L2Code() {
+      const selected = document.getElementById('select-xu-control').value;
+      const data = xuSpecs[selected];
+
+      document.getElementById('xu-val-guid').innerText = data.guid;
+      document.getElementById('xu-val-selector').innerText = data.selector;
+      document.getElementById('xu-val-size').innerText = data.size;
+      document.getElementById('v4l2-code-block').innerText = data.code;
+    }
+
+    function selectUVCEntity(entityId) {
+      document.querySelectorAll('.uvc-node').forEach(node => {
+        node.classList.remove('border-blue-500', 'bg-blue-50');
+        node.classList.add('border-slate-200', 'bg-slate-50');
+      });
+
+      const selectedNode = document.getElementById(`uvc-node-${entityId}`);
+      if (selectedNode) {
+        selectedNode.classList.remove('border-slate-200', 'bg-slate-50');
+        selectedNode.classList.add('border-blue-500', 'bg-blue-50');
+      }
+    }
+
+    function testUVCRequest(reqType) {
+      const resBox = document.getElementById('uvc-req-result');
+      resBox.classList.remove('hidden');
+      
+      if (reqType === 'SET_CUR') {
+        resBox.innerText = `[UVC Control Request] SET_CUR sent to EP0.\nPayload: 0x01 (Trigger Pulsed Mode Enabled)\nResult: USB ACK (Status 0x00 Success)`;
+      } else if (reqType === 'GET_CUR') {
+        resBox.innerText = `[UVC Control Request] GET_CUR executed.\nReturned Current Value: 0x01\nPayload Length: 1 Byte`;
+      } else if (reqType === 'GET_INFO') {
+        resBox.innerText = `[UVC Control Request] GET_INFO executed.\nCapabilities Bitmask: 0x03 (Bit 0: GET supported, Bit 1: SET supported)`;
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // TAB 4: Bandwidth Calculator & Chart.js Logic
+    // ------------------------------------------------------------------
+    let bandwidthChart = null;
+
+    function initBandwidthChart() {
+      const ctx = document.getElementById('bandwidthChart').getContext('2d');
+      bandwidthChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['YUY2 비압축', 'MJPEG 압축', 'USB 2.0 가용 한계', 'USB 3.0 가용 한계'],
+          datasets: [{
+            label: '데이터 대역폭 (Mbps)',
+            data: [1990, 48, 350, 4000],
+            backgroundColor: [
+              'rgba(239, 68, 68, 0.85)',  // Red for high bandwidth
+              'rgba(16, 185, 129, 0.85)', // Green for MJPEG
+              'rgba(245, 158, 11, 0.85)', // Amber for USB 2.0
+              'rgba(37, 99, 235, 0.85)'   // Blue for USB 3.0
+            ],
+            borderColor: [
+              '#dc2626',
+              '#059669',
+              '#d97706',
+              '#1d4ed8'
+            ],
+            borderWidth: 1.5,
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return ` 대역폭: ${context.parsed.y} Mbps`;
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: 'Mbps (메가비트/초)'
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function recalculateBandwidth() {
+      const resVal = document.getElementById('bw-res-select').value;
+      const fps = parseInt(document.getElementById('bw-fps-slider').value);
+      document.getElementById('bw-fps-val').innerText = `${fps} FPS`;
+
+      let width = 1920, height = 1080;
+      if (resVal === '1920x1200') { width = 1920; height = 1200; }
+      else if (resVal === '1280x720') { width = 1280; height = 720; }
+      else if (resVal === '640x480') { width = 640; height = 480; }
+
+      // YUY2 Formula: W * H * 16 * FPS
+      const yuy2Bps = width * height * 16 * fps;
+      const yuy2Mbps = (yuy2Bps / 1000000).toFixed(1);
+      const yuy2Gbps = (yuy2Bps / 1000000000).toFixed(2);
+
+      // MJPEG estimated compression (~20:1 ratio)
+      const mjpegMbps = (yuy2Mbps / 20).toFixed(1);
+
+      document.getElementById('formula-yuy2').innerText = `${width} x ${height} x 16 x ${fps} = ${yuy2Gbps} Gbps (${yuy2Mbps} Mbps)`;
+      document.getElementById('formula-mjpeg').innerText = `약 ${mjpegMbps} Mbps (압축률 ~20:1)`;
+
+      // Update Chart
+      if (bandwidthChart) {
+        bandwidthChart.data.datasets[0].data = [parseFloat(yuy2Mbps), parseFloat(mjpegMbps), 350, 4000];
+        bandwidthChart.update();
+      }
+
+      // Update USB Status Badge
+      const statusBox = document.getElementById('usb-status-box');
+      const statusTitle = document.getElementById('usb-status-title');
+      const statusDesc = document.getElementById('usb-status-desc');
+
+      if (parseFloat(mjpegMbps) <= 350) {
+        statusBox.className = "p-3 rounded-xl border text-xs font-bold space-y-1 bg-emerald-50 text-emerald-900 border-emerald-200";
+        statusTitle.innerText = "USB 2.0 (MJPEG) 전송 가능";
+        statusDesc.innerText = `MJPEG 포맷(${mjpegMbps} Mbps)은 USB 2.0 가용 대역폭(350 Mbps) 이하이므로 프레임 드롭 없이 전송됩니다.`;
+      } else {
+        statusBox.className = "p-3 rounded-xl border text-xs font-bold space-y-1 bg-amber-50 text-amber-900 border-amber-200";
+        statusTitle.innerText = "USB 2.0 대역폭 초과 위험";
+        statusDesc.innerText = `MJPEG 포맷(${mjpegMbps} Mbps)이 USB 2.0 한계를 상회합니다. FPS를 낮추거나 USB 3.0을 사용하십시오.`;
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // TAB 5: Canvas Rolling vs Global Shutter Simulation
+    // ------------------------------------------------------------------
+    let shutterMode = 'global';
+    let propSpeed = 5;
+    let shutterCanvas, shutterCtx;
+    let animFrameId = null;
+    let propAngle = 0;
+    let isFlash = false;
+
+    function setShutterMode(mode) {
+      shutterMode = mode;
+      const btnGlobal = document.getElementById('btn-shutter-global');
+      const btnRolling = document.getElementById('btn-shutter-rolling');
+      const dot = document.getElementById('shutter-canvas-dot');
+      const title = document.getElementById('shutter-canvas-mode-title');
+      const evalText = document.getElementById('shutter-evaluation-text');
+
+      if (mode === 'global') {
+        btnGlobal.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white transition";
+        btnRolling.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 transition";
+        dot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
+        title.innerText = "글로벌 셔터 모드: 전 전체 픽셀 동시 수광 (왜곡 없음)";
+        evalText.innerText = "완벽한 기하학적 형태 보존 (0% Skew)";
+        evalText.className = "font-bold text-emerald-600";
+      } else {
+        btnRolling.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white transition";
+        btnGlobal.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 transition";
+        dot.className = "w-2 h-2 rounded-full bg-rose-500 animate-pulse";
+        title.innerText = "롤링 셔터 모드: 순차적 행 스캔 (대각선 왜곡 발생)";
+        evalText.innerText = "젤로 현상(Skew Artifacts) 및 가로 밴드 노이즈 발생";
+        evalText.className = "font-bold text-rose-600";
+      }
+    }
+
+    function updateShutterSpeed(val) {
+      propSpeed = parseInt(val);
+    }
+
+    function triggerFlashStrobe() {
+      isFlash = true;
+      setTimeout(() => { isFlash = false; }, 150);
+    }
+
+    function initShutterCanvas() {
+      shutterCanvas = document.getElementById('shutterCanvas');
+      if (!shutterCanvas) return;
+      
+      const parent = shutterCanvas.parentElement;
+      shutterCanvas.width = parent.clientWidth;
+      shutterCanvas.height = parent.clientHeight;
+      shutterCtx = shutterCanvas.getContext('2d');
+
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+      renderShutterLoop();
+    }
+
+    function renderShutterLoop() {
+      if (!shutterCtx) return;
+      const w = shutterCanvas.width;
+      const h = shutterCanvas.height;
+      const centerX = w / 2;
+      const centerY = h / 2;
+
+      // Clear Canvas
+      shutterCtx.fillStyle = isFlash ? '#ffffff' : '#0f172a';
+      shutterCtx.fillRect(0, 0, w, h);
+
+      // Draw Grid Lines on Canvas
+      shutterCtx.strokeStyle = isFlash ? '#cbd5e1' : '#1e293b';
+      shutterCtx.lineWidth = 1;
+      for (let x = 0; x < w; x += 30) {
+        shutterCtx.beginPath();
+        shutterCtx.moveTo(x, 0);
+        shutterCtx.lineTo(x, h);
+        shutterCtx.stroke();
+      }
+
+      propAngle += propSpeed * 0.04;
+
+      if (shutterMode === 'global') {
+        // Draw Crisp Propeller
+        drawPropeller(shutterCtx, centerX, centerY, propAngle, false);
+      } else {
+        // Draw Rolling Shutter Distortion (Row-by-Row Skew)
+        if (isFlash) {
+          // Draw Partial Flash Horizontal Band
+          shutterCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+          shutterCtx.fillRect(0, centerY - 20, w, 40);
+        }
+        drawPropeller(shutterCtx, centerX, centerY, propAngle, true);
+      }
+
+      animFrameId = requestAnimationFrame(renderShutterLoop);
+    }
+
+    function drawPropeller(ctx, cx, cy, angle, isRolling) {
+      const numBlades = 3;
+      const radius = 75;
+
+      for (let i = 0; i < numBlades; i++) {
+        const bladeAngle = angle + (i * (2 * Math.PI / numBlades));
+
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        if (isRolling) {
+          // Simulate Rolling Skew by slicing horizontally
+          ctx.fillStyle = '#f59e0b';
+          for (let y = -radius; y <= radius; y += 4) {
+            const rowSkewAngle = bladeAngle + (y * 0.012);
+            const x1 = Math.cos(rowSkewAngle) * (y);
+            const y1 = Math.sin(rowSkewAngle) * (y);
+            ctx.beginPath();
+            ctx.arc(x1, y1, 6, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else {
+          // Clean Solid Propeller Blade
+          ctx.rotate(bladeAngle);
+          ctx.fillStyle = '#3b82f6';
+          ctx.beginPath();
+          ctx.ellipse(radius / 2, 0, radius / 2, 10, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
+
+      // Center Hub
+      ctx.beginPath();
+      ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+      ctx.fillStyle = '#64748b';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    function calculateTriggerExposure(val) {
+      const periodMs = parseFloat(val);
+      const periodHz = (1000 / periodMs).toFixed(1);
+      document.getElementById('trig-period-val').innerText = `${periodMs.toFixed(1)} ms (${periodHz} Hz)`;
+
+      // Formula: Max Exp < Period - (1/120) - 1.6ms
+      const maxExpMs = periodMs - (1000 / 120) - 1.6;
+      const safeMax = Math.max(0.1, maxExpMs).toFixed(2);
+      const maxUs = Math.round(safeMax * 1000);
+
+      document.getElementById('trig-max-exp-result').innerText = `${safeMax} ms (${maxUs.toLocaleString()} µs)`;
+    }
+
+    // ------------------------------------------------------------------
+    // Window Onload Initialization
+    // ------------------------------------------------------------------
+    window.addEventListener('DOMContentLoaded', () => {
+      selectStackLayer(5);
+      generateV4L2Code();
+      initBandwidthChart();
+      recalculateBandwidth();
+      initShutterCanvas();
+    });
+
+    window.addEventListener('resize', () => {
+      if (shutterCanvas) {
+        initShutterCanvas();
+      }
+    });
+  </script>
+</body>
+</html>

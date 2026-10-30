@@ -1,0 +1,7 @@
+{
+  "name": "Hampotech AR0234 USB Global Shutter Camera Protocol Workbench",
+  "description": "Interactive protocol visualizer, double-buffering register simulator, Linux V4L2 XU mapper, and bandwidth analyzer for Hampotech onsemi AR0234 2MP USB global shutter camera.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
